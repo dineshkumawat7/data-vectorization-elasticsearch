@@ -16,18 +16,15 @@ import java.io.IOException;
 public class WordFileController {
     @Autowired
     private WordFileService wordFileService;
-    @Autowired
-    private WordFileReaderService wordFileReaderService;
 
     @PostMapping("/upload")
     public ResponseEntity<String> saveWordFileContent(@RequestParam("file") MultipartFile file) throws IOException {
-        if(file.isEmpty()){
+        if (file.isEmpty()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("file is required");
         }
         String fileName = file.getOriginalFilename();
-        String content = wordFileReaderService.readWordFileText(file.getInputStream().toString());
-        boolean isSave = wordFileService.saveFileContent(fileName, content);
-        if(isSave){
+        boolean isSave = wordFileService.saveFileContent(file);
+        if (isSave) {
             return ResponseEntity.status(HttpStatus.OK).body("file is successfully saved in elasticsearch");
         }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("internal server error");

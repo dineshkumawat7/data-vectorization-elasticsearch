@@ -78,7 +78,6 @@ public class ElasticsearchConfig {
     }
 
     public KeyStore getKeyStore() throws Exception {
-//        InputStream stream= getClass().getClassLoader().getResourceAsStream(keyStorePath);
         FileInputStream keystore = new FileInputStream(new File(keyStorePath));
         KeyStore keyStore = KeyStore.getInstance("JKS");
         keyStore.load(keystore, keyStorePassword.toCharArray());
