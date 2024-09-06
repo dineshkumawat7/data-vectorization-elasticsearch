@@ -10,6 +10,7 @@ import org.apache.http.client.CredentialsProvider;
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.ssl.SSLContexts;
+import org.elasticsearch.client.Node;
 import org.elasticsearch.client.RestClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -53,7 +54,6 @@ public class ElasticsearchConfig {
     public ElasticsearchClient elasticsearchClient(RestClientTransport restClientTransport) {
         return new co.elastic.clients.elasticsearch.ElasticsearchClient(restClientTransport);
     }
-
 
     public
     String keystore = "truststore.jks";

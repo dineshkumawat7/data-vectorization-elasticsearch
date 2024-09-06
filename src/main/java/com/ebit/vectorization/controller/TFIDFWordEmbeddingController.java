@@ -10,8 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @RestController
@@ -22,19 +21,14 @@ public class TFIDFWordEmbeddingController {
     private TFIDFEmbeddingService tfidfEmbeddingService;
 
     @PostMapping("/upload")
-    public ResponseEntity<String> uploadAndProcessFile(@RequestParam("file") MultipartFile[] files){
-        try {
-            List<String> documents = new ArrayList<>();
-            for (MultipartFile file : files) {
-                File tempFile = new File(System.getProperty("java.io.tmpdir") + "/" + file.getOriginalFilename());
-                file.transferTo(tempFile);
-                String content = documentReaderService.readWordDocument(file);
-                documents.add(content);
-            }
-            tfidfEmbeddingService.indexDocuments(documents);
-            return ResponseEntity.status(HttpStatus.OK).body("Documents processed and indexed successfully");
+    public ResponseEntity<float[]> uploadAndProcessFile(@RequestParam("file") MultipartFile files){
+        try{
+            String content = documentReaderService.readWordDocument(files);
+            List<String> terms = Arrays.asList(content.split("\\s+"));
+            float[] vector = tfidfEmbeddingService.calculateTfIdf(content, terms);
+            return ResponseEntity.status(HttpStatus.OK).body(vector);
         }catch (Exception e){
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+            return ResponseEntity.internalServerError().build();
         }
     }
 }

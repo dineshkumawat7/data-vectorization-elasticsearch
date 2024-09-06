@@ -4,116 +4,63 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.similarities.ClassicSimilarity;
-import org.apache.lucene.search.similarities.TFIDFSimilarity;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
-import org.deeplearning4j.models.word2vec.Word2Vec;
-import org.deeplearning4j.text.sentenceiterator.CollectionSentenceIterator;
-import org.deeplearning4j.text.tokenization.tokenizerfactory.DefaultTokenizerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class TFIDFEmbeddingService {
 
-    private Word2Vec word2Vec;
-    private RAMDirectory index;
-    private TFIDFSimilarity similarity = new ClassicSimilarity();
-    private Analyzer analyzer = new StandardAnalyzer();
+    private final Analyzer analyzer;
+    private final Directory directory;
+    private final ClassicSimilarity similarity;
 
-    public void trainWord2VecModel(List<String> sentences) {
-        CollectionSentenceIterator sentenceIterator = new CollectionSentenceIterator(sentences);
-        DefaultTokenizerFactory tokenizerFactory = new DefaultTokenizerFactory();
-
-        word2Vec = new Word2Vec.Builder()
-                .iterate(sentenceIterator)
-                .tokenizerFactory(tokenizerFactory)
-//                .vectorSize(100)
-                .minWordFrequency(1)
-                .seed(42)
-                .build();
-
-        word2Vec.fit();
+    public TFIDFEmbeddingService() {
+        this.analyzer = new StandardAnalyzer();
+        this.directory = new RAMDirectory();
+        this.similarity = new ClassicSimilarity();
     }
 
-    public void indexDocuments(List<String> documents) throws IOException {
-        index = new RAMDirectory();
-        IndexWriterConfig config = new IndexWriterConfig(analyzer);
-        IndexWriter writer = new IndexWriter(index, config);
-
-        for (int i = 0; i < documents.size(); i++) {
+    public void indexDocument(String content) throws IOException {
+        try (IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(analyzer))) {
             Document doc = new Document();
-            doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
-            doc.add(new TextField("content", documents.get(i), Field.Store.YES));
+            doc.add(new TextField("content", content, Field.Store.YES));
             writer.addDocument(doc);
         }
-
-        writer.close();
     }
 
-    public double computeTfIdf(String term, String document) throws IOException {
-        IndexReader reader = DirectoryReader.open(index);
-        int docCount = reader.numDocs();
-        int termDocFreq = reader.docFreq(new org.apache.lucene.index.Term("content", term));
-        int termFreq = 0;
+    public float[] calculateTfIdf(String documentText, List<String> terms) throws IOException {
+        indexDocument(documentText);
 
-        for (int i = 0; i < reader.maxDoc(); i++) {
-            Document doc = reader.document(i);
-            if (doc.get("content").equals(document)) {
-                termFreq = reader.docFreq(new org.apache.lucene.index.Term("content", term));
-                break;
-            }
-        }
+        try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            searcher.setSimilarity(similarity);
 
-        double idf = similarity.idf(termDocFreq, docCount);
-        double tf = similarity.tf(termFreq);
+            Document doc = searcher.doc(0); // Assume single document
+            float[] tfIdfVector = new float[terms.size()];
 
-        return tf * idf;
-    }
+            for (int i = 0; i < terms.size(); i++) {
+                Term term = new Term("content", terms.get(i));
+                long termFreq = reader.totalTermFreq(term);
+                long docFreq = reader.docFreq(term);
 
-    public double[] getTfIdfWeightedWordEmbedding(String document) throws IOException {
-        if (word2Vec == null) {
-            throw new IllegalStateException("Word2Vec model has not been trained yet!");
-        }
-
-        String[] words = document.toLowerCase().split("\\s+");
-        List<double[]> vectors = new ArrayList<>();
-        double totalWeight = 0.0;
-
-        for (String word : words) {
-            double tfIdf = computeTfIdf(word, document);
-            double[] vector = word2Vec.getWordVector(word);
-
-            if (vector != null) {
-                for (int i = 0; i < vector.length; i++) {
-                    vector[i] *= tfIdf;
+                if (termFreq > 0) {
+                    tfIdfVector[i] = similarity.tf(termFreq) * similarity.idf(docFreq, reader.maxDoc());
+                } else {
+                    tfIdfVector[i] = 0.0f;
                 }
-                vectors.add(vector);
-                totalWeight += tfIdf;
             }
+            return tfIdfVector;
         }
-
-        double[] weightedAverageVector = vectors.stream()
-                .reduce(new double[word2Vec.getLayerSize()], (a, b) -> {
-                    for (int i = 0; i < a.length; i++) {
-                        a[i] += b[i];
-                    }
-                    return a;
-                });
-
-        for (int i = 0; i < weightedAverageVector.length; i++) {
-            weightedAverageVector[i] /= totalWeight;
-        }
-
-        return weightedAverageVector;
     }
 }
